@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <!-- Build an executable -->
+        <OutputType>Exe</OutputType>
+
+        <!-- Target modern .NET runtime -->
+        <TargetFramework>net9.0</TargetFramework>
+
+        <!-- Enable implicit global using directives (System, System.Collections.Generic, etc) -->
+        <ImplicitUsings>enable</ImplicitUsings>
+
+        <!-- Enable nullable reference types -->
+        <Nullable>enable</Nullable>
+
+    </PropertyGroup>
+</Project>
