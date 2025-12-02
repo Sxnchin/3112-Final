@@ -9,6 +9,9 @@ namespace DefaultNamespace
 {
     public class GameEngine
     {
+        // track per-turn financials for the final tally
+        private readonly List<FinancialReport> _playerTurnReports = new List<FinancialReport>();
+        private readonly List<FinancialReport> _opponentTurnReports = new List<FinancialReport>();
         private int _turn = 0;
         private const int MaxTurns = 7;
 
@@ -83,6 +86,10 @@ namespace DefaultNamespace
 
             // Simulate results
             var (playerReport, opponentReport) = SimulateTurnAndGetReports(marketState);
+
+            // Persist turn reports for final aggregation
+            _playerTurnReports.Add(playerReport);
+            _opponentTurnReports.Add(opponentReport);
             Notify($"--- Results ---");
             Notify($"Player: Rev ${playerReport.Revenue:F2} | Exp ${playerReport.Expenses:F2} | Profit ${playerReport.Profit:F2}");
             Notify($"Opponent: Rev ${opponentReport.Revenue:F2} | Exp ${opponentReport.Expenses:F2} | Profit ${opponentReport.Profit:F2}");
@@ -107,6 +114,10 @@ namespace DefaultNamespace
             Notify("Rival Co. made their decisions.");
 
             var (playerReport, opponentReport) = SimulateTurnAndGetReports(marketState);
+
+            // Persist turn reports for final aggregation
+            _playerTurnReports.Add(playerReport);
+            _opponentTurnReports.Add(opponentReport);
 
             Notify($"Turn {_turn} Results:");
             Notify($"You - Revenue: ${playerReport.Revenue:F2}, Expenses: ${playerReport.Expenses:F2}, Profit: ${playerReport.Profit:F2}");
@@ -186,7 +197,9 @@ namespace DefaultNamespace
             Notify("");
             Notify("===== FINAL RESULTS =====");
 
-            var (playerReport, opponentReport) = SimulateTurnAndGetReports(new MarketState());
+            // compute the final results by aggregating all saved turn reports
+            var playerReport = new FinancialReport(_playerTurnReports.Sum(r => r.Revenue), _playerTurnReports.Sum(r => r.Expenses));
+            var opponentReport = new FinancialReport(_opponentTurnReports.Sum(r => r.Revenue), _opponentTurnReports.Sum(r => r.Expenses));
 
             Notify($"Your Final Profit: ${playerReport.Profit:F2}");
             Notify($"Opponent Final Profit: ${opponentReport.Profit:F2}");
