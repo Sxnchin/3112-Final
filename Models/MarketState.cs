@@ -2,6 +2,7 @@
 {
     public class MarketState
     {
-        public double GlobalDemandMultiplier { get; set; } = 0.0;
+        // Default to 1.0 (no change). Market events will modify this additively.
+        public double GlobalDemandMultiplier { get; set; } = 1.0;
     }
 }

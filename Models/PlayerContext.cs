@@ -33,5 +33,7 @@ namespace DefaultNamespace.Models
         }
 
         public double TotalEmployeeCosts() => _results.Sum(r => r.Cost);
+
+        public IEnumerable<TurnResult> GetResults() => _results.AsReadOnly();
     }
 }

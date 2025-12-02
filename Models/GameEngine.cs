@@ -1,4 +1,6 @@
-﻿using DefaultNamespace.Enums;
+﻿using System;
+using System.Linq;
+using DefaultNamespace.Enums;
 using DefaultNamespace.Models;
 using DefaultNamespace.Services;
 using DefaultNamespace.Interfaces;
@@ -69,17 +71,18 @@ namespace DefaultNamespace
         {
             _turn++;
             Notify($"--- TURN {_turn} START ---");
-
-            // Simulate market event
+            // Prepare market state and simulate market event
+            var marketState = new MarketState();
             var marketEvent = MarketEventFactory.CreateRandomEvent(_turn);
             Notify($"Market Event: {marketEvent?.Name ?? "None"}");
+            marketEvent?.AffectMarket(marketState);
 
             // Rival decisions
             Opponent.DecideTurn(this);
             Notify("Rival Co. made their decisions.");
 
             // Simulate results
-            var (playerReport, opponentReport) = SimulateTurnAndGetReports();
+            var (playerReport, opponentReport) = SimulateTurnAndGetReports(marketState);
             Notify($"--- Results ---");
             Notify($"Player: Rev ${playerReport.Revenue:F2} | Exp ${playerReport.Expenses:F2} | Profit ${playerReport.Profit:F2}");
             Notify($"Opponent: Rev ${opponentReport.Revenue:F2} | Exp ${opponentReport.Expenses:F2} | Profit ${opponentReport.Profit:F2}");
@@ -95,14 +98,15 @@ namespace DefaultNamespace
         {
             _turn++;
             Notify($"--- TURN {_turn} START ---");
-
+            var marketState = new MarketState();
             var marketEvent = MarketEventFactory.CreateRandomEvent(_turn);
             Notify($"Market Event: {marketEvent?.Name ?? "None"}");
+            marketEvent?.AffectMarket(marketState);
 
             Opponent.DecideTurn(this);
             Notify("Rival Co. made their decisions.");
 
-            var (playerReport, opponentReport) = SimulateTurnAndGetReports();
+            var (playerReport, opponentReport) = SimulateTurnAndGetReports(marketState);
 
             Notify($"Turn {_turn} Results:");
             Notify($"You - Revenue: ${playerReport.Revenue:F2}, Expenses: ${playerReport.Expenses:F2}, Profit: ${playerReport.Profit:F2}");
@@ -116,14 +120,59 @@ namespace DefaultNamespace
         }
 
         // === Simulation ===
-        public (FinancialReport player, FinancialReport opponent) SimulateTurnAndGetReports()
+        public (FinancialReport player, FinancialReport opponent) SimulateTurnAndGetReports(MarketState market)
         {
-            // Simplified revenue/expense calculation
-            double playerRevenue = Player.Employees.Sum(e => e.SkillLevel * 50);
-            double opponentRevenue = Opponent.Employees.Sum(e => e.SkillLevel * 50);
+            // More realistic revenue/expense calculation using prices, employees, and market
+            var playerCtx = new PlayerContext(Player, market);
+            var opponentCtx = new PlayerContext(Opponent, market);
 
-            double playerExpenses = Player.Employees.Sum(e => 10);
-            double opponentExpenses = Opponent.Employees.Sum(e => 10);
+            // Execute each employee's turn (register their effects)
+            foreach (var e in Player.Employees)
+                e.ExecuteTurn(playerCtx);
+            foreach (var e in Opponent.Employees)
+                e.ExecuteTurn(opponentCtx);
+
+            // Notify employee outcomes so the UI can show messages
+            foreach (var r in playerCtx.GetResults())
+                Notify($"Player - {r.EmployeeName}: {r.Message} (Sales x{r.SalesMultiplier:F2}, Spoilage x{r.SpoilageMultiplier:F2}, Cost ${r.Cost:F2})");
+            foreach (var r in opponentCtx.GetResults())
+                Notify($"Opponent - {r.EmployeeName}: {r.Message} (Sales x{r.SalesMultiplier:F2}, Spoilage x{r.SpoilageMultiplier:F2}, Cost ${r.Cost:F2})");
+
+            double playerRevenue = 0.0;
+            double opponentRevenue = 0.0;
+
+            // For each product, split market demand between the player and opponent
+            foreach (var kv in Player.Prices)
+            {
+                var product = kv.Key;
+                var playerPrice = kv.Value;
+                var opponentPrice = Opponent.Prices.ContainsKey(product) ? Opponent.Prices[product] : playerPrice;
+
+                // Base demand per product, adjusted by global market state
+                double totalDemand = GameConfig.Instance.BaseDemand * market.GlobalDemandMultiplier;
+
+                // Compute attractiveness weights: higher sales multiplier and lower price = higher weight
+                double playerWeight = playerCtx.AggregateSalesMultiplier() / Math.Max(0.01, playerPrice);
+                double opponentWeight = opponentCtx.AggregateSalesMultiplier() / Math.Max(0.01, opponentPrice);
+                var sumWeight = playerWeight + opponentWeight;
+
+                double playerShare = sumWeight <= 0 ? 0.5 : (playerWeight / sumWeight);
+                double opponentShare = sumWeight <= 0 ? 0.5 : (opponentWeight / sumWeight);
+
+                // Apply spoilage effects (reduce units sold)
+                var playerSpoilage = playerCtx.AggregateSpoilageMultiplier();
+                var opponentSpoilage = opponentCtx.AggregateSpoilageMultiplier();
+
+                var playerUnits = totalDemand * playerShare * playerSpoilage;
+                var opponentUnits = totalDemand * opponentShare * opponentSpoilage;
+
+                playerRevenue += playerUnits * playerPrice;
+                opponentRevenue += opponentUnits * opponentPrice;
+            }
+
+            // Expenses from employee costs
+            double playerExpenses = playerCtx.TotalEmployeeCosts();
+            double opponentExpenses = opponentCtx.TotalEmployeeCosts();
 
             var playerReport = new FinancialReport(playerRevenue, playerExpenses);
             var opponentReport = new FinancialReport(opponentRevenue, opponentExpenses);
@@ -131,13 +180,13 @@ namespace DefaultNamespace
             return (playerReport, opponentReport);
         }
 
-        // === Final Results / Win Condition ===
+        //  Final Results / Win Condition 
         private void PrintFinalResults()
         {
             Notify("");
             Notify("===== FINAL RESULTS =====");
 
-            var (playerReport, opponentReport) = SimulateTurnAndGetReports();
+            var (playerReport, opponentReport) = SimulateTurnAndGetReports(new MarketState());
 
             Notify($"Your Final Profit: ${playerReport.Profit:F2}");
             Notify($"Opponent Final Profit: ${opponentReport.Profit:F2}");
